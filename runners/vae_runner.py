@@ -16,6 +16,8 @@ from models.vae import Encoder, Decoder, ImplicitEncoder, MLPDecoder, MLPEncoder
 import itertools
 from evaluations import fid
 
+from torch.utils.data import Dataset, DataLoader, random_split
+
 __all__ = ['VAERunner']
 
 
@@ -58,7 +60,16 @@ class VAERunner():
             train_indices, test_indices = indices[:int(num_items * 0.8)], indices[int(num_items * 0.8):]
             test_dataset = Subset(dataset, test_indices)
             dataset = Subset(dataset, train_indices)
+        # In your existing code
+        elif self.config.data.dataset == 'PODmodes':
+            # Load the dataset
+            full_dataset = CustomDataset()
 
+            # Split the dataset into train and test sets
+            num_items = len(full_dataset)
+            train_size = int(0.8 * num_items)
+            test_size = num_items - train_size
+            dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
         elif self.config.data.dataset == 'CELEBA':
             dataset = ImageFolder(root=os.path.join(self.args.run, 'datasets', 'celeba'),
                                   transform=transforms.Compose([
@@ -543,6 +554,9 @@ class VAERunner():
         elif self.config.data.dataset == 'MNIST':
             test_dataset = MNIST(os.path.join(self.args.run, 'datasets', 'mnist'), train=False, download=True,
                                  transform=transform)
+        elif self.config.data.dataset == 'PODmodes':
+            raise NotImplementedError('custom dataset')
+
         elif self.config.data.dataset == 'CELEBA':
             dataset = ImageFolder(root=os.path.join(self.args.run, 'datasets', 'celeba'),
                                   transform=transforms.Compose([
@@ -606,3 +620,26 @@ class VAERunner():
             total_n += X.shape[0]
             print('mini-batch: {}, current iwae-10: {}, average iwae-10: {}'.format(batch + 1, loss.item(),
                                                                                     total_l / total_n))
+
+
+class CustomDataset(Dataset):
+    def __init__(self):
+        # Load your data and extract relevant dimensions
+        dim = 8  # Same dimensionality as used for training
+
+        data_path = '../MultiplicativeDiffusion/'
+        data_path = data_path + 'tempPODModes/LES_Re300/temporalModes_16modes/U.npy'
+        # data_path = data_path + 'tempPODModes/LES_Re3900/temporalModes_16modes/U.npy'
+
+        npdata = np.load(data_path)
+        self.data = npdata[:, :dim]/10
+        self.labels = np.zeros(len(self.data))  # Dummy labels (e.g., all zeros)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        # Convert data to PyTorch tensors
+        # # return torch.tensor(self.data[idx], dtype=torch.float32)
+        # return torch.tensor(self.data[idx], dtype=torch.float32)
+        return torch.tensor(self.data[idx], dtype=torch.float32), self.labels[idx]
